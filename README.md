@@ -76,17 +76,4 @@ DDL 和提醒可手动添加或通过对话创建。到期检查需要本地服�
 
 环境变量由启动程序的进程提供；本项目不会自动读取 `.env` 文件。
 
-## 隐私与开发
-
-运行 `npm run check:public` 检查 Git 已跟踪的文件；提交前运行 `npm run check:staged` 检查真正暂存的内容。检查会拒绝常见运行数据、凭据文件、个人路径及疑似密钥；它不能替代人工审阅。详见 [发布与隐私](docs/publishing.md)。
-
-```text
-npm test
-npm run check:public
-```
-
-测试使用临时数据库和虚构凭据，不需要真实学校账号或 API Key。GitHub Actions 在 Windows / Node.js 24 上运行检查。
-
-目录：`src/` 后端与 MCP，`public/` 前端，`extension/` Chrome 扩展，`test/` 自动检查，`scripts/` 启停与发布检查。
-
 官方参考：[DeepSeek API](https://api-docs.deepseek.com/)、[MCP](https://modelcontextprotocol.io/)、[Chrome scripting API](https://developer.chrome.com/docs/extensions/reference/api/scripting)、[ImapFlow](https://imapflow.com/docs/api/imapflow-client/)、[SheetJS](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/)。
