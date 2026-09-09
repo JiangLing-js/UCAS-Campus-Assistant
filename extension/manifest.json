@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "国科大校园桥接",
+  "version": "0.3.1",
+  "minimum_chrome_version": "106",
+  "description": "同步校园页面；在本机工作台点击后，用加密保存的凭据登录 SEP 和邮箱。",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "host_permissions": ["https://*.ucas.ac.cn/*", "https://*.ucas.edu.cn/*", "https://mail.cstnet.cn/*", "http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [{"matches":["http://127.0.0.1/*"],"js":["workbench.js"],"run_at":"document_idle"}],
+  "action": {"default_title": "国科大校园桥接", "default_popup": "popup.html"}
+}

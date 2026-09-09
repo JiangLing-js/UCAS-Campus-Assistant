@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>国科大 · 校园助手</title><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/integrations.css"><link rel="stylesheet" href="/login.css"></head>
+<body>
+<aside class="sidebar">
+ <a class="brand" href="#chat"><span class="brand-icon">国</span><div>校园助手<small>UCAS COMPANION</small></div></a>
+ <button id="new-chat" class="new-chat"><span>＋</span> 新的对话 <kbd>Ctrl K</kbd></button>
+ <nav id="navigation" aria-label="主导航">
+  <button data-view="chat" class="active"><span class="nav-icon">◌</span>对话<span class="nav-end">↗</span></button>
+  <button data-view="inbox"><span class="nav-icon">▤</span>校园收件箱<span id="inbox-count" class="count">0</span></button>
+  <button data-view="calendar"><span class="nav-icon">▦</span>我的课表</button>
+  <button data-view="tasks"><span class="nav-icon">☑</span>待办与 DDL</button>
+  <button data-view="lectures"><span class="nav-icon">◈</span>讲座与新闻</button>
+  <button data-view="planner"><span class="nav-icon">▥</span>选课规划</button>
+  <button data-view="activities"><span class="nav-icon">✧</span>校园活动</button>
+  <button data-view="services"><span class="nav-icon">⌘</span>校园服务</button>
+ </nav>
+ <div class="sidebar-label">最近对话</div><div id="conversations" class="conversations"></div>
+ <div class="sidebar-bottom"><button data-view="settings" class="settings-button">⚙ <span>连接与设置</span><span id="connection-dot" class="dot"></span></button><div class="local-badge"><span class="dot live"></span>本地工作空间 <span>v0.1</span></div></div>
+</aside>
+<div class="workspace">
+ <header class="topbar"><div><span class="breadcrumb">国科大</span><span class="slash">/</span><span id="view-title">对话</span></div><div class="top-actions"><div class="font-controls" role="group" aria-label="字体大小"><button type="button" data-font-step="-10" aria-label="缩小字体" title="缩小字体">A−</button><output data-font-scale-value aria-live="polite" aria-label="当前字体比例">100%</output><button type="button" data-font-step="10" aria-label="放大字体" title="放大字体">A＋</button></div><span class="date" id="today-date"></span><button id="notify-button" class="icon-button" title="消息提醒" aria-label="消息提醒">♧<span id="notification-count"></span></button><span class="avatar">我</span></div></header>
+ <div class="workspace-body"><main id="main-content"></main><aside id="today-panel" class="today-panel"></aside></div>
+</div>
+<dialog id="item-dialog"><form id="item-form"><div class="dialog-heading"><h2>添加一件事</h2><button type="button" id="close-dialog" class="icon-button" aria-label="关闭">×</button></div><label>事项<input name="title" placeholder="例如：提交机器学习课程作业" required maxlength="300"></label><div class="form-grid"><label>类型<select name="kind"><option value="deadline">DDL</option><option value="reminder">提醒</option><option value="course">课程</option><option value="note">笔记</option></select></label><label>提前提醒<select name="remindMinutes"><option value="15">15 分钟</option><option value="60">1 小时</option><option value="1440">1 天</option><option value="0">准时</option><option value="">不提醒</option></select></label></div><div class="form-grid"><label>开始 / 截止时间<input name="startsAt" type="datetime-local"></label><label>结束时间（可选）<input name="endsAt" type="datetime-local"></label></div><label>地点（可选）<input name="location" placeholder="教室或线上会议"></label><label>补充说明<textarea name="content" rows="3" placeholder="记下需要准备的事情…"></textarea></label><p class="muted small">时间按北京时间保存。</p><button class="primary" type="submit">保存事项</button><p id="item-error" class="error" role="alert"></p></form></dialog>
+<div id="toast" class="toast" role="status"></div><script type="module" src="/app.js"></script>
+</body></html>

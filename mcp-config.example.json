@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ucas": {
+      "command": "node",
+      "args": ["ABSOLUTE_PROJECT_PATH/src/mcp.js"],
+      "env": {"UCAS_DATA_DIR": "ABSOLUTE_PROJECT_PATH/data"}
+    }
+  }
+}

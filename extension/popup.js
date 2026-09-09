@@ -1,0 +1,3 @@
+const $=id=>document.getElementById(id);
+chrome.storage.local.get(['server','token','autoSync','lastResult']).then(c=>{if(c.server)$('server').value=c.server;if(c.token)$('token').value=c.token;$('auto').checked=!!c.autoSync;if(c.lastResult)$('status').textContent=c.lastResult.message;});
+$('pair').addEventListener('submit',async e=>{e.preventDefault();$('save').disabled=true;$('status').textContent='正在读取已打开的校园页面…';try{const r=await chrome.runtime.sendMessage({type:'configure',server:$('server').value.trim(),token:$('token').value.trim(),autoSync:$('auto').checked});$('status').textContent=r.message;}catch{$('status').textContent='扩展暂时无法连接，请重新打开。';}finally{$('save').disabled=false;}});

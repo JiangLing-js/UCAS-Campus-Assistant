@@ -1,0 +1,29 @@
+{
+  "name": "ucas-companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "国科大校园助手：本地工作台、DeepSeek 工具调用和 MCP",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "mcp": "node src/mcp.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "check:public": "node scripts/check-public.js",
+    "check:staged": "node scripts/check-public.js --staged"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "cheerio": "^1.1.2",
+    "express": "^5.1.0",
+    "imapflow": "^2.0.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
