@@ -32,6 +32,7 @@ async function refresh({render=false}={}){
  renderToday();if(render)renderView();
 }
 function renderToday(){
+ $('#today-date').textContent=fmt(new Date(),{year:'numeric',month:'long',day:'numeric',weekday:'short'});
  $('#today-panel').innerHTML=`<div class="panel-head"><h3>今天的安排</h3><span>${fmt(new Date(),{weekday:'long'})}</span></div>${todayItems().map(i=>`<div class="timeline-entry"><div class="time">${time(i.startsAt)}${i.endsAt?' — '+time(i.endsAt):''}</div><h4>${escape(i.title)}</h4><p>${escape(i.location||kinds[i.kind])}</p></div>`).join('')||'<p class="small muted">今天暂时没有已同步的安排。</p>'}<div class="panel-separator"></div><div class="panel-head"><h3>已连接的校园信息</h3><span>${state.syncs.filter(s=>s.status==='ok').length} 个来源</span></div>${state.syncs.slice(0,5).map(s=>`<div class="source-mini"><span class="dot ${s.status==='ok'?'live':''}"></span>${escape(({timetable:'本周课表',lectures:'科学前沿讲座','sep.ucas.ac.cn':'SEP 通知','www.ucas.ac.cn':'校园新闻'})[s.source]||s.source)}<small>${fmt(s.synced_at,{hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')}<div class="quiet-note"><strong>留一点时间，给更重要的事。</strong>课程、通知和截止日期，都可以从这里找到。课表仅包含实际同步过的周。</div>`;
 }
 function navigate(next){view=next;filter='all';query='';location.hash=next;renderView();}

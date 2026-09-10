@@ -58,6 +58,27 @@ test('DeepSeek tool loop executes a real read and persists its final answer with
  await chat({conversationId:c.id,text:'查询测试事项',fetcher,secrets:{deepseekKey:'mock-test-key'},onEvent:e=>events.push(e)});
  assert.equal(calls,2);assert.equal(store.messages(c.id).at(-1).content,'已查询到测试事项。');assert.ok(events.some(e=>e.type==='tool'));assert.ok(!JSON.stringify(events).includes('mock-test-key'));
 });
+test('DeepSeek refreshes the Beijing clock across midnight within a tool loop and on the next user turn',async()=>{
+ const c=store.createConversation();let calls=0,clockReads=0;
+ store.addMessage(c.id,'assistant','历史时间：2030-12-30 12:00。');
+ const instants=['2030-12-31T15:59:59Z','2030-12-31T16:00:01Z','2031-01-01T16:17:00Z'];
+ const expected=['2030-12-31T23:59:59+08:00','2031-01-01T00:00:01+08:00','2031-01-02T00:17:00+08:00'];
+ const fetcher=async(url,options)=>{
+  const body=JSON.parse(options.body),index=calls++;
+  assert.equal(body.messages[0].role,'system');
+  assert.ok(body.messages[0].content.includes(expected[index]));
+  assert.ok(!body.messages[0].content.includes(instants[index]));
+  assert.match(body.messages[0].content,/以本轮服务器时钟为准/);
+  assert.ok(body.messages.some(m=>m.role==='assistant'&&m.content?.includes('历史时间')));
+  if(index===0)return Response.json({choices:[{message:{role:'assistant',tool_calls:[{id:'clock-read',type:'function',function:{name:'get_agenda',arguments:'{"from":"2030-12-31T00:00:00+08:00","to":"2031-01-01T23:59:59+08:00"}'}}]}}]});
+  if(index===1){assert.equal(body.messages.at(-1).role,'tool');assert.equal(JSON.parse(body.messages.at(-1).content).timezone,'Asia/Shanghai');}
+  return Response.json({choices:[{message:{role:'assistant',content:'测试时间回答。'}}]});
+ };
+ const options={conversationId:c.id,fetcher,secrets:{deepseekKey:'mock-test-key'},clock:()=>new Date(instants[clockReads++])};
+ await chat({...options,text:'查询近期日程和当前时间'});
+ await chat({...options,text:'重新看看当前时间'});
+ assert.equal(calls,3);assert.equal(clockReads,3);
+});
 test('absent DeepSeek key fails clearly before persisting a user message',async()=>{
  const c=store.createConversation();await assert.rejects(()=>chat({conversationId:c.id,text:'测试',secrets:{}}),/API Key/);assert.equal(store.messages(c.id).length,0);
 });
