@@ -3,13 +3,18 @@ import { listItems, upsertItem, getItem, db } from './store.js';
 import { SOURCES, syncSource } from './sources.js';
 import { searchCatalog, datasets, plans, getPlan, createPlan, setPlanCourse } from './catalog.js';
 import { campusServices, queryMailForModel } from './integrations.js';
+import { deadlineTextInput, extractDeadlines } from './deadlines.js';
 const time=z.string().datetime({offset:true}).transform(v=>new Date(v).toISOString());
 export const itemInput=z.object({
  kind:z.enum(['course','deadline','reminder','lecture','notice','news','note','activity']),title:z.string().trim().min(1).max(300),
  content:z.string().max(20000).default(''),startsAt:time.nullable().optional(),endsAt:time.nullable().optional(),
  location:z.string().max(500).default(''),remindMinutes:z.number().int().min(0).max(43200).nullable().optional(),
 }).superRefine((v,ctx)=>{if(v.endsAt&&v.startsAt&&v.endsAt<=v.startsAt)ctx.addIssue({code:'custom',message:'结束时间必须晚于开始时间'});if(v.remindMinutes!=null&&!v.startsAt)ctx.addIssue({code:'custom',message:'提醒需要明确时间'});});
+export const itemPatch=z.object({status:z.enum(['open','done','archived']).optional(),title:z.string().trim().min(1).max(300).optional(),content:z.string().max(20000).optional(),location:z.string().max(500).optional(),startsAt:time.nullable().optional(),endsAt:time.nullable().optional(),remindMinutes:z.number().int().min(0).max(43200).nullable().optional()}).strict();
+export function updateItem(id,changes){const existing=getItem(id);if(!existing)throw new Error('事项不存在');const merged={...existing,...itemPatch.parse(changes)};return upsertItem({...merged,...itemInput.parse(merged)});}
 export const tools={
+ extract_deadlines:{readOnly:true,description:'在本地识别用户提供或已同步通知中的截止日期，返回候选事项、原文证据和待核对项。不会保存提醒；缺少年份、时刻或使用相对日期时应核对，不能把候选当作已保存事项。',schema:deadlineTextInput,run:extractDeadlines},
+ update_item:{description:'仅按用户明确要求编辑指定本地事项的时间、标题、地点、提醒或完成状态；不会修改学校系统。修改真实截止日期与稍后再提醒不同。',schema:z.object({id:z.string().min(1),changes:itemPatch}),run:({id,changes})=>updateItem(id,changes)},
  search_course_catalog:{readOnly:true,description:'检索用户导入的选课数据集，按课程名、编号、教师、学期、类别和校区筛选。返回的是规划数据，余量和最新安排以学校为准。',schema:z.object({datasetId:z.string().optional(),query:z.string().max(200).default(''),semester:z.string().max(100).default(''),category:z.string().max(100).default(''),campus:z.string().max(100).default(''),limit:z.number().int().min(1).max(100).default(30)}),run:searchCatalog},
  get_course_plans:{readOnly:true,description:'列出本地选课方案，或查询指定方案的学分、备选课程及按星期/节次/周次检查的时间冲突。缺少排课数据会标为待核对。',schema:z.object({id:z.string().optional()}),run:({id})=>id?getPlan(id):{plans:plans(),datasets:datasets()}},
  create_course_plan:{description:'按用户要求创建本地选课方案，需要已导入的数据集 ID。不会向学校提交选课。',schema:z.object({name:z.string().trim().min(1).max(100),datasetId:z.string()}),run:({name,datasetId})=>createPlan(name,datasetId)},

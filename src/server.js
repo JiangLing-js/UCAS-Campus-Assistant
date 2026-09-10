@@ -8,7 +8,9 @@ import { db,getSetting,setSetting,listItems,getItem,upsertItem,tickReminders,not
 import { readSecrets,saveSecrets } from './vault.js';
 import { ingestSnapshot,cleanUrl } from './ingest.js';
 import { SOURCES,syncSource } from './sources.js';
-import { itemInput } from './tools.js';
+import { itemInput,updateItem } from './tools.js';
+import { deadlineRoutes } from './deadline-routes.js';
+import { claimNotifications,acknowledgeNotifications,snoozeNotification,tickSnoozes,scheduledSnoozes } from './reminders.js';
 import { chat } from './deepseek.js';
 import { calendar } from './calendar.js';
 import { extendedRoutes } from './extended-routes.js';
@@ -25,7 +27,7 @@ app.use((req,res,next)=>{
  if(![`127.0.0.1:${port}`,`localhost:${port}`].includes(req.headers.host))return res.status(403).json({error:'不允许的访问主机'});
  res.set({'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});
  const caller=req.headers.origin;
- if(['/api/bridge/import','/api/bridge/login/claim','/api/bridge/login/report'].includes(req.path)&&caller?.match(/^chrome-extension:\/\/[a-p]{32}$/)){
+ if(['/api/bridge/import','/api/bridge/login/claim','/api/bridge/login/report','/api/bridge/notifications/claim','/api/bridge/notifications/ack'].includes(req.path)&&caller?.match(/^chrome-extension:\/\/[a-p]{32}$/)){
   res.set({'Access-Control-Allow-Origin':caller,'Access-Control-Allow-Headers':'Content-Type, X-Ucas-Token, X-Ucas-Extension','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin'});
   if(req.method==='OPTIONS')return res.sendStatus(204);
  }else if(caller&&!['http://127.0.0.1:'+port,'http://localhost:'+port].includes(caller))return res.status(403).json({error:'不允许跨站访问本地服务'});
@@ -39,6 +41,10 @@ app.post('/api/bridge/import',(req,res)=>{
  const results=snapshots.map(s=>ingestSnapshot(s));res.json({ok:true,results});
 });
 loginBridgeRoutes(app,loginBroker);
+for(const [action,run] of Object.entries({claim:()=>claimNotifications(),ack:acknowledgeNotifications}))app.post('/api/bridge/notifications/'+action,(req,res)=>{
+ if(!sameToken(req.headers['x-ucas-token'],getSetting('bridgeToken')))return res.status(401).json({error:'连接码不正确。'});
+ res.json(run(req.body));
+});
 app.use('/api',(req,res,next)=>{
  const cookie=req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith('ucas_session='))?.slice(13);
  if(!sameToken(cookie,session))return res.status(401).json({error:'请重新打开本地工作台。'});
@@ -46,8 +52,9 @@ app.use('/api',(req,res,next)=>{
  next();
 });
 extendedRoutes(app);
+deadlineRoutes(app);
 loginRoutes(app,loginBroker);
-app.get('/api/state',(_,res)=>res.json({items:listItems({limit:500}),notifications:notifications(),sources:SOURCES,syncs:db.prepare('SELECT * FROM syncs').all(),conversations:db.prepare('SELECT * FROM conversations ORDER BY created_at DESC').all(),serverTime:new Date().toISOString()}));
+app.get('/api/state',(_,res)=>res.json({items:listItems({limit:500}),notifications:notifications(),snoozes:scheduledSnoozes(),sources:SOURCES,syncs:db.prepare('SELECT * FROM syncs').all(),conversations:db.prepare('SELECT * FROM conversations ORDER BY created_at DESC').all(),serverTime:new Date().toISOString()}));
 app.get('/api/settings',(_,res)=>{
  const secrets=readSecrets();res.json({model:getSetting('model','deepseek-v4-flash'),hasDeepseekKey:!!(secrets.deepseekKey||process.env.DEEPSEEK_API_KEY),hasAccount:!!secrets.ucasAccount,hasPassword:!!secrets.ucasPassword,hasMailAccount:!!secrets.mailAccount,hasMailPassword:!!secrets.mailPassword,autoMail:getSetting('autoMail',false),allowMailAi:getSetting('allowMailAi',false),cookieOrigins:Object.keys(secrets.cookies||{}),bridgeToken:getSetting('bridgeToken'),autoSync:getSetting('autoSync',false),vault:'Windows DPAPI · 当前 Windows 用户',dataDirectory:DATA,extensionDirectory:path.join(ROOT,'extension'),mcpConfig:{mcpServers:{ucas:{command:process.execPath,args:[path.join(ROOT,'src/mcp.js')],env:{UCAS_DATA_DIR:DATA}}}}});
 });
@@ -69,12 +76,15 @@ app.post('/api/cookies',(req,res)=>{
 app.post('/api/items',(req,res)=>{const r=upsertItem(itemInput.parse(req.body));tickReminders();res.json(r);});
 app.patch('/api/items/:id',(req,res)=>{
  const existing=getItem(req.params.id);if(!existing)return res.status(404).json({error:'事项不存在'});
- const patch=z.object({status:z.enum(['open','done','archived']).optional(),title:z.string().trim().min(1).max(300).optional(),content:z.string().max(20000).optional(),startsAt:z.string().datetime({offset:true}).nullable().optional(),endsAt:z.string().datetime({offset:true}).nullable().optional(),remindMinutes:z.number().int().min(0).max(43200).nullable().optional()}).strict().parse(req.body);
- const merged={...existing,...patch};res.json(upsertItem({...merged,...itemInput.parse(merged)}));
+ const result=updateItem(req.params.id,req.body);tickReminders();res.json(result);
 });
 app.post('/api/import',(req,res)=>res.json(ingestSnapshot(req.body)));
 app.post('/api/sync/:id',async(req,res)=>res.json(await syncSource(req.params.id)));
 app.post('/api/notifications/:id/read',(req,res)=>{db.prepare('UPDATE notifications SET seen=1 WHERE id=?').run(req.params.id);res.json({ok:true});});
+app.post('/api/notifications/read-all',(_,res)=>{db.prepare('UPDATE notifications SET seen=1 WHERE seen=0').run();res.json({ok:true});});
+app.post('/api/notifications/claim',(_,res)=>res.json(claimNotifications()));
+app.post('/api/notifications/ack',(req,res)=>res.json(acknowledgeNotifications(req.body)));
+app.post('/api/notifications/:id/snooze',(req,res)=>res.json(snoozeNotification(req.params.id,z.object({minutes:z.number()}).strict().parse(req.body).minutes)));
 app.post('/api/conversations',(_,res)=>res.json(createConversation()));
 app.post('/api/shutdown',(_,res)=>{res.json({ok:true});setTimeout(()=>process.emit('SIGTERM'),100);});
 app.get('/api/conversations/:id/messages',(req,res)=>res.json(messages(req.params.id)));
@@ -96,7 +106,8 @@ app.get('/',(req,res)=>{res.cookie('ucas_session',session,{httpOnly:true,sameSit
 app.use(express.static(path.join(ROOT,'public'),{index:false}));
 app.use((err,req,res,next)=>{if(res.headersSent)return next(err);res.status(err instanceof z.ZodError?400:500).json({error:err instanceof z.ZodError?err.issues.map(i=>i.message).join('；'):'操作失败，请检查数据格式或稍后重试。'});});
 const bootstrap=path.join(DATA,'bootstrap-snapshots.json');if(fs.existsSync(bootstrap)&&!getSetting('bootstrapImported')){for(const snapshot of JSON.parse(fs.readFileSync(bootstrap,'utf8')))ingestSnapshot(snapshot);setSetting('bootstrapImported',true);}
-tickReminders();const reminders=setInterval(()=>tickReminders(),15000);let syncing=false;
+function checkReminders(){tickReminders();tickSnoozes();}
+checkReminders();const reminders=setInterval(checkReminders,15000);let syncing=false;
 const auto=setInterval(async()=>{if(!getSetting('autoSync',false)||syncing)return;syncing=true;try{await syncSource('news');}finally{syncing=false;}},30*60000);
 const mailAuto=setInterval(()=>{if(getSetting('autoMail',false))syncMailbox().catch(()=>{});},15*60000);
 const httpServer=app.listen(port,'127.0.0.1',()=>console.log(`UCAS Companion: ${origin}`));

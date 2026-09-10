@@ -14,7 +14,8 @@ const env={...process.env,UCAS_DATA_DIR:temp,DEEPSEEK_API_KEY:''};
 before(async()=>{
  const reservation=net.createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));origin=`http://127.0.0.1:${port}`;
  child=spawn(process.execPath,['src/server.js'],{cwd:path.resolve('.'),env:{...env,PORT:String(port)},stdio:['ignore','pipe','pipe'],windowsHide:true});
- await Promise.race([new Promise((resolve,reject)=>{child.stdout.on('data',chunk=>{if(chunk.toString().includes('UCAS Companion:'))resolve();});child.once('exit',code=>reject(new Error('Server exited '+code)));}),new Promise((_,reject)=>{const t=setTimeout(()=>reject(new Error('Server startup timeout')),30000);t.unref();})]);
+ let startupError='';child.stderr.on('data',chunk=>{startupError=(startupError+chunk.toString()).slice(-1500);});
+ await Promise.race([new Promise((resolve,reject)=>{child.stdout.on('data',chunk=>{if(chunk.toString().includes('UCAS Companion:'))resolve();});child.once('exit',code=>reject(new Error('Server exited '+code+' '+startupError)));}),new Promise((_,reject)=>{const t=setTimeout(()=>reject(new Error('Server startup timeout '+startupError)),30000);t.unref();})]);
  const page=await fetch(origin);cookie=page.headers.get('set-cookie').split(';')[0];assert.equal(page.status,200);
 });
 const request=(url,body,extra={})=>fetch(origin+url,{method:body?'POST':'GET',headers:{cookie,...(body?{'Content-Type':'application/json'}:{}),...extra.headers},body:body?JSON.stringify(body):undefined,...(extra.method?{method:extra.method}:{})});
@@ -41,7 +42,7 @@ test('bridge requires its own token and validates UCAS-only import; handles Unic
 });
 test('real stdio MCP handshake exposes and calls all expected campus tools',async()=>{
  const client=new Client({name:'integration-test',version:'1.0.0'});const transport=new StdioClientTransport({command:process.execPath,args:[path.resolve('src/mcp.js')],env,stderr:'pipe'});
- try{await client.connect(transport);const result=await client.listTools();assert.equal(result.tools.length,13);const created=await client.callTool({name:'create_item',arguments:{kind:'note',title:'MCP 实际握手测试'}});assert.ok(!created.isError);const found=await client.callTool({name:'search_campus',arguments:{query:'MCP 实际握手测试'}});assert.match(found.content[0].text,/MCP 实际握手测试/);const sources=await client.callTool({name:'list_sources',arguments:{}});assert.match(sources.content[0].text,/SEP/);}finally{await client.close();}
+ try{await client.connect(transport);const result=await client.listTools();assert.equal(result.tools.length,15);const created=await client.callTool({name:'create_item',arguments:{kind:'note',title:'MCP 实际握手测试'}});assert.ok(!created.isError);const found=await client.callTool({name:'search_campus',arguments:{query:'MCP 实际握手测试'}});assert.match(found.content[0].text,/MCP 实际握手测试/);const sources=await client.callTool({name:'list_sources',arguments:{}});assert.match(sources.content[0].text,/SEP/);}finally{await client.close();}
 });
 test('dataset preview/import/planning endpoints work and new private routes require the local session',async()=>{
  for(const route of ['/api/services','/api/mail','/api/datasets','/api/plans'])assert.equal((await fetch(origin+route)).status,401);
@@ -74,6 +75,23 @@ test('one-click HTTP broker requires a local session and a pinned, single-use ex
  const mailJob=await(await request('/api/login/jobs',{provider:'mail',extensionId})).json();
  const originless=await fetch(origin+'/api/bridge/login/claim',{method:'POST',headers:{'Content-Type':'application/json','X-Ucas-Extension':extensionId},body:JSON.stringify({id:mailJob.id,ticket:mailJob.ticket})});
  assert.equal(originless.status,200);assert.equal((await originless.json()).password,'dummy-mail-login-password');
+});
+
+test('deadline and reminder HTTP routes protect data and coordinate browser/extension claims',async()=>{
+ for(const route of ['/api/deadlines/preview','/api/deadlines/import','/api/notifications/claim','/api/notifications/ack'])assert.equal((await fetch(origin+route,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
+ const draft=await(await request('/api/deadlines/preview',{text:'作业截止：2031年4月5日23:59',referenceTime:'2031-04-01T00:00:00Z'})).json();assert.equal(draft.candidates[0].startsAt,'2031-04-05T15:59:00.000Z');
+ const input={items:[{title:'API 导入作业',startsAt:draft.candidates[0].startsAt,remindMinutes:60}]};
+ assert.equal((await(await request('/api/deadlines/import',input)).json()).count,1);assert.equal((await(await request('/api/deadlines/import',input)).json()).duplicates,1);
+ const due=await(await request('/api/items',{kind:'reminder',title:'API 提醒测试',startsAt:new Date().toISOString(),remindMinutes:0})).json();
+ const settings=await(await request('/api/settings')).json();
+ const bridgeHeaders={'Content-Type':'application/json',Origin:'chrome-extension://'+'a'.repeat(32)};
+ assert.equal((await fetch(origin+'/api/bridge/notifications/claim',{method:'POST',headers:bridgeHeaders,body:'{}'})).status,401);
+ const pageClaim=await(await request('/api/notifications/claim',{})).json();const n=pageClaim.notifications.find(n=>n.title==='API 提醒测试');assert.ok(n);
+ const bridgeClaim=await(await fetch(origin+'/api/bridge/notifications/claim',{method:'POST',headers:{...bridgeHeaders,'X-Ucas-Token':settings.bridgeToken},body:'{}'})).json();assert.equal(bridgeClaim.notifications.length,0);
+ const ack=await(await request('/api/notifications/ack',{ids:[n.id],deliveryToken:pageClaim.deliveryToken})).json();assert.equal(ack.count,1);
+ assert.equal((await request('/api/notifications/'+n.id+'/snooze',{minutes:30})).status,200);
+ const state=await(await request('/api/state')).json();assert.equal(state.items.find(i=>i.id===due.id).startsAt,due.startsAt);assert.ok(state.snoozes.some(s=>s.notificationId===n.id));
+ assert.equal((await request('/api/notifications/'+n.id+'/snooze',{minutes:-1})).status,400);
 });
 
 after(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}fs.rmSync(temp,{recursive:true,force:true});});

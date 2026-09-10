@@ -51,6 +51,7 @@ playwright-report/
 *.xls
 *.csv
 *.png
+!extension/icon.png
 *.jpg
 *.jpeg
 *.webp

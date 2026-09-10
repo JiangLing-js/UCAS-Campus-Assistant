@@ -50,7 +50,7 @@ test('calendar uses UTC, escapes fields, folds UTF-8 at 75 octets, and includes 
  assert.match(ics,/DTSTART:20260911T120000Z/);assert.match(ics,/TRIGGER:-PT15M/);assert.match(ics,/LOCATION:一楼\\,教室\\;A/);for(const line of ics.split('\r\n'))assert.ok(Buffer.byteLength(line)<=75);assert.ok(ics.replace(/\r\n /g,'').includes(title));assert.equal(foldLine('a'.repeat(76)).split('\r\n')[0].length,75);
 });
 test('model tool schemas compile; unknown tool and invalid arguments are rejected',async()=>{
- assert.equal(modelTools().length,13);for(const t of modelTools())assert.equal(t.function.parameters.type,'object');await assert.rejects(()=>callTool('get_password',{}));await assert.rejects(()=>callTool('create_item',{kind:'reminder',title:''}));
+ assert.equal(modelTools().length,15);for(const t of modelTools())assert.equal(t.function.parameters.type,'object');await assert.rejects(()=>callTool('get_password',{}));await assert.rejects(()=>callTool('create_item',{kind:'reminder',title:''}));
 });
 test('DeepSeek tool loop executes a real read and persists its final answer without exposing secrets',async()=>{
  const c=store.createConversation();let calls=0;const events=[];

@@ -29,8 +29,9 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id||sender.tab)return;
  if(message.type==='sync'){sync().then(respond);return true;}
  if(message.type==='configure'){
-  (async()=>{const server=localServer(message.server);if(!/^[a-f0-9]{48}$/.test(message.token||''))throw new Error('连接码格式不正确');await chrome.storage.local.set({server,token:message.token,autoSync:!!message.autoSync});await chrome.alarms.clear('campus-sync');if(message.autoSync)await chrome.alarms.create('campus-sync',{periodInMinutes:15});return await sync();})().then(respond).catch(e=>respond({ok:false,message:e.message}));return true;
+  (async()=>{const server=localServer(message.server);if(!/^[a-f0-9]{48}$/.test(message.token||''))throw new Error('连接码格式不正确');const autoRemind=message.autoRemind===undefined?(await chrome.storage.local.get('autoRemind')).autoRemind===true:message.autoRemind===true;if(autoRemind&&!await chrome.permissions.contains({permissions:['notifications']}))throw new Error('请先允许通知权限');await chrome.storage.local.set({server,token:message.token,autoSync:!!message.autoSync,autoRemind});await chrome.alarms.clear('campus-sync');if(message.autoSync)await chrome.alarms.create('campus-sync',{periodInMinutes:15});await restoreReminderAlarm();if(autoRemind)await deliverBackgroundReminders();return await sync();})().then(respond).catch(e=>respond({ok:false,message:e.message}));return true;
  }
 });
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='campus-sync')sync();});
 chrome.runtime.onStartup.addListener(async()=>{const config=await chrome.storage.local.get('autoSync');if(config.autoSync)chrome.alarms.create('campus-sync',{periodInMinutes:15});});
+importScripts('reminders.js');

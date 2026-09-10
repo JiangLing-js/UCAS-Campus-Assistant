@@ -1,0 +1,8 @@
+.deadline-dialog{width:min(720px,92vw)}
+.deadline-candidate{border:1px solid var(--line,#dfe5da);border-radius:14px;padding:18px;margin:18px 0;min-width:0}
+.deadline-candidate legend{padding:0 8px}
+.deadline-candidate blockquote{margin:12px 0;padding:8px 12px;border-left:3px solid #8ba77c;color:var(--muted,#66725e);font-size:.9em;white-space:pre-wrap;overflow-wrap:anywhere}
+.reminder-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
+.reminder-actions select{width:auto;margin:0;padding:5px 8px}
+.notification-card .snooze-time{color:#526e43;font-size:.9em}
+@media(max-width:640px){.deadline-candidate .form-grid{grid-template-columns:1fr}}
