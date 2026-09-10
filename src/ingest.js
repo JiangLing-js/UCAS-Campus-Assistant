@@ -65,10 +65,10 @@ export function parseSnapshot(input) {
   }
   return {source:results[0]?.source||host,sourceUrl:s.sourceUrl,items:[...new Map(results.map(i=>[i.id,i])).values()]};
 }
-export function ingestSnapshot(snapshot){
-  if(snapshot?.integration)return ingestIntegration(snapshot);
-  const parsed=parseSnapshot(snapshot);db.exec('BEGIN IMMEDIATE');
-  try{for(const r of parsed.items)upsertItem(r,{imported:true});recordSync(parsed.source,'ok',`同步 ${parsed.items.length} 条；来源：${parsed.sourceUrl}`);db.exec('COMMIT');}
-  catch(e){db.exec('ROLLBACK');throw e;}
+export function ingestSnapshot(snapshot,{transaction=true}={}){
+  if(snapshot?.integration)return ingestIntegration(snapshot,{transaction});
+  const parsed=parseSnapshot(snapshot);if(transaction)db.exec('BEGIN IMMEDIATE');
+  try{for(const r of parsed.items)upsertItem(r,{imported:true});recordSync(parsed.source,'ok',`同步 ${parsed.items.length} 条；来源：${parsed.sourceUrl}`);if(transaction)db.exec('COMMIT');}
+  catch(e){if(transaction)db.exec('ROLLBACK');throw e;}
   return {source:parsed.source,count:parsed.items.length};
 }

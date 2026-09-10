@@ -43,7 +43,10 @@ for(const entry of tracked){
    const rejectedUrlFixture=file==='test/core.test.js'&&email===['p','sep.ucas.ac.cn'].join('@');
    if(!dummy&&!rejectedUrlFixture)fail(file,i+1,'non-example email address');
   }
-  for(const m of line.matchAll(sessionPattern))if(!(file.startsWith('test/')&&fixtureSessions.has(m[1])))fail(file,i+1,'URL with a session/authorization parameter');
+  for(const m of line.matchAll(sessionPattern)){
+   const syntheticMailSession=file==='test/campus-sync.test.js'&&m[1]==='synthetic-session';
+   if(!(file.startsWith('test/')&&fixtureSessions.has(m[1]))&&!syntheticMailSession)fail(file,i+1,'URL with a session/authorization parameter');
+  }
  }
 }
 if(!tracked.length)fail('(index)',0,'no tracked files; stage the intended public files first');

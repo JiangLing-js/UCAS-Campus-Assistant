@@ -16,6 +16,7 @@ import { calendar } from './calendar.js';
 import { extendedRoutes } from './extended-routes.js';
 import { syncMailbox } from './mail.js';
 import { createLoginBroker,loginBridgeRoutes,loginRoutes } from './login.js';
+import {campusSyncBridgeRoutes,campusSyncRoutes} from './campus-sync-routes.js';
 
 const app=express();const port=Number(process.env.PORT||3210);const origin=`http://127.0.0.1:${port}`;
 const session=randomBytes(32).toString('hex');
@@ -27,7 +28,7 @@ app.use((req,res,next)=>{
  if(![`127.0.0.1:${port}`,`localhost:${port}`].includes(req.headers.host))return res.status(403).json({error:'不允许的访问主机'});
  res.set({'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});
  const caller=req.headers.origin;
- if(['/api/bridge/import','/api/bridge/login/claim','/api/bridge/login/report','/api/bridge/notifications/claim','/api/bridge/notifications/ack'].includes(req.path)&&caller?.match(/^chrome-extension:\/\/[a-p]{32}$/)){
+ if(['/api/bridge/import','/api/bridge/login/claim','/api/bridge/login/report','/api/bridge/notifications/claim','/api/bridge/notifications/ack','/api/bridge/sync/start','/api/bridge/sync/claim','/api/bridge/sync/report'].includes(req.path)&&caller?.match(/^chrome-extension:\/\/[a-p]{32}$/)){
   res.set({'Access-Control-Allow-Origin':caller,'Access-Control-Allow-Headers':'Content-Type, X-Ucas-Token, X-Ucas-Extension','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin'});
   if(req.method==='OPTIONS')return res.sendStatus(204);
  }else if(caller&&!['http://127.0.0.1:'+port,'http://localhost:'+port].includes(caller))return res.status(403).json({error:'不允许跨站访问本地服务'});
@@ -41,6 +42,7 @@ app.post('/api/bridge/import',(req,res)=>{
  const results=snapshots.map(s=>ingestSnapshot(s));res.json({ok:true,results});
 });
 loginBridgeRoutes(app,loginBroker);
+campusSyncBridgeRoutes(app,token=>sameToken(token,getSetting('bridgeToken')));
 for(const [action,run] of Object.entries({claim:()=>claimNotifications(),ack:acknowledgeNotifications}))app.post('/api/bridge/notifications/'+action,(req,res)=>{
  if(!sameToken(req.headers['x-ucas-token'],getSetting('bridgeToken')))return res.status(401).json({error:'连接码不正确。'});
  res.json(run(req.body));
@@ -54,6 +56,7 @@ app.use('/api',(req,res,next)=>{
 extendedRoutes(app);
 deadlineRoutes(app);
 loginRoutes(app,loginBroker);
+campusSyncRoutes(app);
 app.get('/api/state',(_,res)=>res.json({items:listItems({limit:500}),notifications:notifications(),snoozes:scheduledSnoozes(),sources:SOURCES,syncs:db.prepare('SELECT * FROM syncs').all(),conversations:db.prepare('SELECT * FROM conversations ORDER BY created_at DESC').all(),serverTime:new Date().toISOString()}));
 app.get('/api/settings',(_,res)=>{
  const secrets=readSecrets();res.json({model:getSetting('model','deepseek-v4-flash'),hasDeepseekKey:!!(secrets.deepseekKey||process.env.DEEPSEEK_API_KEY),hasAccount:!!secrets.ucasAccount,hasPassword:!!secrets.ucasPassword,hasMailAccount:!!secrets.mailAccount,hasMailPassword:!!secrets.mailPassword,autoMail:getSetting('autoMail',false),allowMailAi:getSetting('allowMailAi',false),cookieOrigins:Object.keys(secrets.cookies||{}),bridgeToken:getSetting('bridgeToken'),autoSync:getSetting('autoSync',false),vault:'Windows DPAPI · 当前 Windows 用户',dataDirectory:DATA,extensionDirectory:path.join(ROOT,'extension'),mcpConfig:{mcpServers:{ucas:{command:process.execPath,args:[path.join(ROOT,'src/mcp.js')],env:{UCAS_DATA_DIR:DATA}}}}});

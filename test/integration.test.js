@@ -19,6 +19,18 @@ before(async()=>{
  const page=await fetch(origin);cookie=page.headers.get('set-cookie').split(';')[0];assert.equal(page.status,200);
 });
 const request=(url,body,extra={})=>fetch(origin+url,{method:body?'POST':'GET',headers:{cookie,...(body?{'Content-Type':'application/json'}:{}),...extra.headers},body:body?JSON.stringify(body):undefined,...(extra.method?{method:extra.method}:{})});
+
+test('one-click HTTP queue requires authentication and a source-bound, expiring bridge lease',async()=>{
+ assert.equal((await fetch(origin+'/api/campus-sync')).status,401);
+ assert.equal((await request('/api/bridge/sync/claim',{version:'0.5.0'})).status,401);
+ const settings=await(await request('/api/settings')).json(),headers={'X-Ucas-Token':settings.bridgeToken,Origin:'chrome-extension://'+'a'.repeat(32)};
+ const created=await(await request('/api/campus-sync',{sources:['news']})).json();assert.equal(created.job.done,false);
+ const claimed=await(await request('/api/bridge/sync/claim',{version:'0.5.0'},{headers})).json();assert.equal(claimed.step.source,'news');
+ const wrong=await request('/api/bridge/sync/report',{...claimed.step,status:'ok',snapshots:[{sourceUrl:'https://mail.cstnet.cn/',integration:'mail',mail:[]}]},{headers});assert.equal(wrong.status,500);
+ const report=await(await request('/api/bridge/sync/report',{...claimed.step,status:'ok',snapshots:[{sourceUrl:'https://www.ucas.ac.cn/',title:'校园新闻',tables:[],links:[{text:'关于虚构测试活动的校园通知',href:'https://www.ucas.ac.cn/test.html'}]}]},{headers})).json();assert.equal(report.job.status,'completed');assert.equal(report.job.steps[0].count,1);
+ assert.equal((await request('/api/bridge/sync/report',{...claimed.step,status:'empty'},{headers})).status,500);
+ const status=await(await request('/api/campus-sync/'+created.job.id)).json();assert.equal(status.bridge.version,'0.5.0');assert.doesNotMatch(JSON.stringify(status),/lease_token|leaseToken|ticket/);
+});
 test('loopback API refuses unauthenticated calls, foreign Origin, and DNS rebinding Host',async()=>{
  assert.equal((await fetch(origin+'/api/state')).status,401);
  assert.equal((await request('/api/items',{kind:'note',title:'bad'},{headers:{Origin:'https://evil.test'}})).status,403);
@@ -42,7 +54,13 @@ test('bridge requires its own token and validates UCAS-only import; handles Unic
 });
 test('real stdio MCP handshake exposes and calls all expected campus tools',async()=>{
  const client=new Client({name:'integration-test',version:'1.0.0'});const transport=new StdioClientTransport({command:process.execPath,args:[path.resolve('src/mcp.js')],env,stderr:'pipe'});
- try{await client.connect(transport);const result=await client.listTools();assert.equal(result.tools.length,15);const created=await client.callTool({name:'create_item',arguments:{kind:'note',title:'MCP 实际握手测试'}});assert.ok(!created.isError);const found=await client.callTool({name:'search_campus',arguments:{query:'MCP 实际握手测试'}});assert.match(found.content[0].text,/MCP 实际握手测试/);const sources=await client.callTool({name:'list_sources',arguments:{}});assert.match(sources.content[0].text,/SEP/);}finally{await client.close();}
+ try{
+  await client.connect(transport);const result=await client.listTools();assert.equal(result.tools.length,18);const created=await client.callTool({name:'create_item',arguments:{kind:'note',title:'MCP 实际握手测试'}});assert.ok(!created.isError);const found=await client.callTool({name:'search_campus',arguments:{query:'MCP 实际握手测试'}});assert.match(found.content[0].text,/MCP 实际握手测试/);const sources=await client.callTool({name:'list_sources',arguments:{}});assert.match(sources.content[0].text,/SEP/);
+  const queued=await client.callTool({name:'sync_campus',arguments:{sources:['news','lectures']}});assert.ok(!queued.isError);
+  const job=JSON.parse(queued.content[0].text).job;assert.equal(job.status,'queued');
+  const web=await(await request('/api/campus-sync/'+job.id)).json();assert.equal(web.job.steps.length,2);assert.equal(web.job.id,job.id);
+  const stopped=await client.callTool({name:'cancel_sync',arguments:{id:job.id}});assert.equal(JSON.parse(stopped.content[0].text).job.status,'cancelled');
+ }finally{await client.close();}
 });
 test('dataset preview/import/planning endpoints work and new private routes require the local session',async()=>{
  for(const route of ['/api/services','/api/mail','/api/datasets','/api/plans'])assert.equal((await fetch(origin+route)).status,401);

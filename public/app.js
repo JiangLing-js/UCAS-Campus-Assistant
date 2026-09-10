@@ -1,4 +1,5 @@
 import {loginPanel,initLogin,startLogin} from './login.js';
+import {initCampusSync,checkCampusSync} from './campus-sync.js';
 import {appearanceSettings} from './appearance.js';
 import {openDeadlineDialog} from './deadlines.js';
 import {deliverPageNotifications,backgroundReminderHelp,remindersPage} from './reminders.js';
@@ -21,6 +22,7 @@ async function api(url,data,method=data?'POST':'GET'){
  const body=await response.json();if(!response.ok)throw new Error(body.error||'操作失败');return body;
 }
 initLogin({api,toast});
+initCampusSync({api,toast,refresh:()=>refresh({render:true})});
 function safeLink(href){try{const u=new URL(href);return ['http:','https:'].includes(u.protocol)?u.href:''}catch{return ''}}
 function messageHtml(text){return escape(text).replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,(_,label,url)=>`<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);}
 function empty(text,symbol='◌'){return `<div class="empty"><div class="empty-symbol">${symbol}</div>${escape(text)}</div>`;}
@@ -59,7 +61,7 @@ async function sendChat(event){
   const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversationId,text})});
   if(!response.ok){const body=await response.json();throw new Error(body.error);}
   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',answerReceived=false;
-  while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const chunks=buffer.split('\n\n');buffer=chunks.pop();for(const chunk of chunks){if(!chunk.startsWith('data: '))continue;const evt=JSON.parse(chunk.slice(6));if(evt.type==='status')progress.textContent=evt.text;if(evt.type==='tool')progress.textContent=`${evt.status==='complete'?'✓':'◌'} ${({search_campus:'查询校园信息',get_agenda:'查阅日程',create_item:'保存本地事项',complete_item:'更新事项',list_sources:'检查来源',sync_source:'同步来源'})[evt.name]||evt.name}`;if(evt.type==='answer'){answerReceived=true;history.push({role:'assistant',content:evt.text});}if(evt.type==='error')throw new Error(evt.text);}}
+  while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const chunks=buffer.split('\n\n');buffer=chunks.pop();for(const chunk of chunks){if(!chunk.startsWith('data: '))continue;const evt=JSON.parse(chunk.slice(6));if(evt.type==='status')progress.textContent=evt.text;if(evt.type==='tool'&&['sync_campus','get_sync_status','cancel_sync'].includes(evt.name))void checkCampusSync();if(evt.type==='tool')progress.textContent=`${evt.status==='complete'?'✓':'◌'} ${({search_campus:'查询校园信息',get_agenda:'查阅日程',create_item:'保存本地事项',complete_item:'更新事项',list_sources:'检查来源',sync_source:'同步来源'})[evt.name]||evt.name}`;if(evt.type==='answer'){answerReceived=true;history.push({role:'assistant',content:evt.text});}if(evt.type==='error')throw new Error(evt.text);}}
   if(!answerReceived)throw new Error('连接已结束，但没有收到完整回答。');
  }catch(error){toast(error.message);sessionStorage.setItem('draft',text);}
  finally{busy=false;if(conversationId)history=await api(`/conversations/${conversationId}/messages`).catch(()=>history);await refresh();if(view==='chat'){renderChat();$('#main-content').scrollTop=$('#main-content').scrollHeight;}}

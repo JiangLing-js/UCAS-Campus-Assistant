@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "国科大校园桥接",
-  "version": "0.4.0",
+  "version": "0.5.2",
   "minimum_chrome_version": "116",
   "description": "同步校园页面；在本机工作台点击后，用加密保存的凭据登录 SEP 和邮箱。",
   "permissions": ["activeTab", "scripting", "storage", "alarms"],

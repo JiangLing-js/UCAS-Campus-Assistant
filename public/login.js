@@ -7,7 +7,7 @@ export function loginPanel(settings){
 }
 function status(provider,text){messages.set(provider,text);for(const el of document.querySelectorAll('[data-login-status]'))if(el.dataset.loginStatus===provider)el.textContent=text;}
 function disable(provider,value){for(const el of document.querySelectorAll('[data-login]'))if(el.dataset.login===provider)el.disabled=value;}
-function bridge(action,data={}){
+export function bridge(action,data={}){
  return new Promise((resolve,reject)=>{
   const requestId=crypto.randomUUID();
   const timer=setTimeout(()=>{window.removeEventListener('message',listener);reject(new Error('未连接到新版校园桥接。请在 Chrome 扩展管理页重新加载「国科大校园桥接」，然后刷新工作台。'));},5000);
@@ -28,7 +28,7 @@ export async function startLogin(provider){
   await bridge('start',{provider,id:job.id,ticket:job.ticket});started=true;delete job.ticket;
   for(let i=0;i<95;i++){
    const result=await loginApi('/login/jobs/'+job.id);status(provider,result.message);
-   if(result.done){loginToast(`${labels[provider]}：${result.message}`);return;}
+   if(result.done){loginToast(`${labels[provider]}：${result.message}`);return result;}
    await new Promise(resolve=>setTimeout(resolve,1000));
   }
   status(provider,'登录等待已结束，请查看官方页面的结果。');
